@@ -1,0 +1,4 @@
+DROP TRIGGER IF EXISTS trg_task_updated_at ON task;
+DROP FUNCTION IF EXISTS set_updated_at;
+DROP TABLE IF EXISTS task;
+DROP EXTENSION IF EXISTS "uuid-ossp";
