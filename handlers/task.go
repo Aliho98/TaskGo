@@ -192,7 +192,7 @@ func DeleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 	db := database.GetDB()
 
-	result, err := db.Exec((`DELETE FROM task WHERE id = $1, id`))
+	result, err := db.Exec(`DELETE FROM task WHERE id = $1`, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to delete task")
 		return

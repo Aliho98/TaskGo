@@ -11,6 +11,10 @@ import (
 
 var DB *sql.DB
 
+func GetDb() Querier {
+	return DB
+}
+
 func Connect() error {
 	connStr := "host=localhost port=5432 user=postgres password= dbname=postgres sslmode=disable"
 	var err error
