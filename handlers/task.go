@@ -5,6 +5,7 @@ import (
 	"78/logger"
 	"78/models"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -24,13 +25,58 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 
 }
+func buildTaskQuery(status, sort, order string) (string, []any) {
+	query := `SELECT id, title, description, status, created_at, updated_at FROM task WHERE deleted_at IS NULL`
+	args := []any{}
+	argPos := 1
+
+	// filter by status
+	if status != "" {
+		query += fmt.Sprintf(" AND status = $%d", argPos)
+		args = append(args, status)
+		argPos++
+	}
+
+	// sort column — whitelist allowed columns
+	sortColumn := "created_at" // default
+	switch sort {
+	case "title":
+		sortColumn = "title"
+	case "status":
+		sortColumn = "status"
+	case "updated_at":
+		sortColumn = "updated_at"
+	case "created_at", "":
+		sortColumn = "created_at"
+	}
+
+	// sort direction — whitelist asc/desc
+	sortOrder := "DESC" // default
+	switch strings.ToLower(order) {
+	case "asc":
+		sortOrder = "ASC"
+	case "desc", "":
+		sortOrder = "DESC"
+	}
+
+	query += fmt.Sprintf(" ORDER BY %s %s", sortColumn, sortOrder)
+
+	return query, args
+}
 
 func CreateTask(w http.ResponseWriter, r *http.Request) {
-	var task models.Task
+	var dto models.CreateTaskDTO
 
-	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid Json Body")
 		return
+	}
+
+	// map DTO -> internal model
+	task := models.Task{
+		Title:       dto.Title,
+		Description: dto.Description,
+		Status:      dto.Status,
 	}
 
 	if errs := task.CreateValidate(); len(errs) > 0 {
@@ -43,9 +89,9 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
 
 	row := db.QueryRow(
-		`INSERT INTO task(title ,description, status)
+		`INSERT INTO task(title, description, status)
 				VALUES ($1, $2, $3)
-				Returning id , title, description, status, created_at, updated_at`,
+				RETURNING id, title, description, status, created_at, updated_at`,
 		task.Title,
 		task.Description,
 		task.Status,
@@ -62,25 +108,30 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "Failed to Create task")
 		return
 	}
-	writeJSON(w, http.StatusCreated, task)
-	logger.Log.Debug("task created")
 
+	writeJSON(w, http.StatusCreated, task.ToResponseDTO())
+	logger.Log.Debug("task created")
 }
 
 func GetAllTasks(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
-	rows, err := db.Query(`SELECT id, title, description, status, created_at, updated_at FROM task ORDER BY created_at DESC`)
+
+	status := r.URL.Query().Get("status")
+	sort := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order") // asc / desc
+
+	query, args := buildTaskQuery(status, sort, order)
+
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to get all tasks")
 		return
 	}
 	defer rows.Close()
 
-	tasks := []models.Task{}
+	tasksDTO := []models.TaskResponseDTO{}
 	for rows.Next() {
-
 		var task models.Task
-
 		if err := rows.Scan(
 			&task.ID,
 			&task.Title,
@@ -92,12 +143,11 @@ func GetAllTasks(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "Failed to get all tasks")
 			return
 		}
-		tasks = append(tasks, task)
+		tasksDTO = append(tasksDTO, task.ToResponseDTO())
 	}
 
-	writeJSON(w, http.StatusOK, tasks)
+	writeJSON(w, http.StatusOK, tasksDTO)
 	logger.Log.Debug("got all tasks")
-
 }
 
 func GetTaskByID(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +162,9 @@ func GetTaskByID(w http.ResponseWriter, r *http.Request) {
 	var task models.Task
 
 	err := db.QueryRow(
-		`SELECT id, title, description, status, created_at, updated_at FROM task WHERE id = $1`, id).Scan(
+		`SELECT id, title, description, status, created_at, updated_at 
+		 FROM task 
+		 WHERE id = $1 AND deleted_at IS NULL`, id).Scan(
 		&task.ID,
 		&task.Title,
 		&task.Description,
@@ -122,12 +174,11 @@ func GetTaskByID(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-
 		writeError(w, http.StatusNotFound, "task not found")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, task)
+	writeJSON(w, http.StatusOK, task.ToResponseDTO())
 	logger.Log.Debug("got task by id")
 }
 
@@ -139,11 +190,16 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var task models.Task
-	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+	var dto models.UpdateTaskDTO
+	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid Json Body")
 		return
+	}
 
+	task := models.Task{
+		Title:       dto.Title,
+		Description: dto.Description,
+		Status:      dto.Status,
 	}
 
 	if errs := task.ValidateUpdate(); len(errs) > 0 {
@@ -158,7 +214,7 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 	row := db.QueryRow(
 		`UPDATE task
 				SET title = $1, description = $2, status = $3
-				WHERE id = $4
+				WHERE id = $4 AND deleted_at IS NULL
 				RETURNING id, title, description, status, created_at, updated_at`,
 		task.Title,
 		task.Description,
@@ -177,9 +233,8 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, task)
+	writeJSON(w, http.StatusOK, task.ToResponseDTO())
 	logger.Log.Debug("task updated")
-
 }
 
 func DeleteTaskHard(w http.ResponseWriter, r *http.Request) {

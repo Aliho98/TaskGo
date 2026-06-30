@@ -11,3 +11,14 @@ type Task struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
 }
+
+func (t Task) ToResponseDTO() TaskResponseDTO {
+	return TaskResponseDTO{
+		ID:          t.ID,
+		Title:       t.Title,
+		Description: t.Description,
+		Status:      t.Status,
+		CreatedAt:   t.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   t.UpdatedAt.Format(time.RFC3339),
+	}
+}
