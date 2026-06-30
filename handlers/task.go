@@ -182,7 +182,7 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func DeleteTask(w http.ResponseWriter, r *http.Request) {
+func DeleteTaskHard(w http.ResponseWriter, r *http.Request) {
 
 	id := strings.TrimPrefix(r.URL.Path, "/tasks/")
 	if id == "" {
@@ -206,4 +206,32 @@ func DeleteTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"result": "Task deleted"})
 	logger.Log.Debug("task deleted")
 
+}
+
+func DeleteTaskSoft(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/tasks/")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "Invalid Task ID")
+		return
+	}
+
+	db := database.GetDB()
+
+	result, err := db.Exec(
+		`UPDATE task SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`,
+		id,
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to delete task")
+		return
+	}
+
+	count, _ := result.RowsAffected()
+	if count == 0 {
+		writeError(w, http.StatusNotFound, "Task not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"result": "Task soft-deleted"})
+	logger.Log.Debug("task soft deleted")
 }

@@ -45,14 +45,21 @@ func main() {
 		}
 
 	})
-
+	mux.HandleFunc("/tasks/{id}/hard", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodDelete:
+			handlers.DeleteTaskHard(w, r)
+		default:
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		}
+	})
 	mux.HandleFunc("/tasks/{id}", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			handlers.GetTaskByID(w, r)
 
 		case http.MethodDelete:
-			handlers.DeleteTask(w, r)
+			handlers.DeleteTaskSoft(w, r)
 
 		case http.MethodPut:
 			handlers.UpdateTask(w, r)
