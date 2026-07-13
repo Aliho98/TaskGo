@@ -14,7 +14,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	logger.Init() // your handlers call logger.Log, so it must exist
+	logger.Init()
 	m.Run()
 }
 

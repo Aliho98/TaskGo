@@ -1,13 +1,16 @@
 package models
 
-import "strings"
+import (
+	"78/internal/domain"
+	"strings"
+)
 
 type ValidationError struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
 }
 
-func (t *Task) CreateValidate() []ValidationError {
+func (t *domain.Task) CreateValidate() []ValidationError {
 	var errs []ValidationError
 
 	if strings.TrimSpace(t.Title) == "" {
@@ -30,7 +33,7 @@ func (t *Task) CreateValidate() []ValidationError {
 	return errs
 }
 
-func (t *Task) ValidateUpdate() []ValidationError {
+func (t *domain.Task) ValidateUpdate() []ValidationError {
 	var errs []ValidationError
 
 	if t.Title != "" && len(t.Title) > 255 {
