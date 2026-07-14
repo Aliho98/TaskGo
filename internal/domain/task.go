@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"78/models"
 	"context"
 	"errors"
 	"time"
@@ -17,7 +16,7 @@ type Task struct {
 	ID          uuid.UUID  `json:"id"`
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
-	Status      string     `json:"status"`
+	Status      TaskStatus `json:"status"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
@@ -40,13 +39,13 @@ type TaskRepository interface {
 	HardDelete(ctx context.Context, id uuid.UUID) error
 }
 
-func (t Task) ToResponseDTO() models.TaskResponseDTO {
-	return models.TaskResponseDTO{
-		ID:          t.ID,
-		Title:       t.Title,
-		Description: t.Description,
-		Status:      t.Status,
-		CreatedAt:   t.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   t.UpdatedAt.Format(time.RFC3339),
-	}
-}
+//func (t Task) ToResponseDTO() models.TaskResponseDTO {
+//	return models.TaskResponseDTO{
+//		ID:          t.ID,
+//		Title:       t.Title,
+//		Description: t.Description,
+//		Status:      t.Status,
+//		CreatedAt:   t.CreatedAt.Format(time.RFC3339),
+//		UpdatedAt:   t.UpdatedAt.Format(time.RFC3339),
+//	}
+//}

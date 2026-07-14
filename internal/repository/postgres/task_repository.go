@@ -27,12 +27,28 @@ func (r *TaskRow) TableName() *domain.Task {
 		ID:          r.ID,
 		Title:       r.Title,
 		Description: r.Description,
-		Status:      r.Status,
+		Status:      domain.TaskStatus(r.Status),
 		CreatedAt:   r.CreatedAt,
 		UpdatedAt:   r.UpdatedAt,
 	}
 	if r.DeletedAt.Valid {
 		t.DeletedAt = &r.DeletedAt.Time
+	}
+	return t
+}
+
+func (r TaskRow) toDomain() *domain.Task {
+	t := &domain.Task{
+		ID:          r.ID,
+		Title:       r.Title,
+		Description: r.Description,
+		Status:      domain.TaskStatus(r.Status),
+		CreatedAt:   r.CreatedAt,
+		UpdatedAt:   r.UpdatedAt,
+	}
+	if r.DeletedAt.Valid {
+		t.DeletedAt = &r.DeletedAt.Time
+
 	}
 	return t
 }
@@ -66,7 +82,7 @@ func (r *TaskRepository) Create(ctx context.Context, task *domain.Task) error {
 	return nil
 }
 
-func (r *TaskRepository) GetById(ctx context.Context, id uuid.UUID) (*domain.Task, error) {
+func (r *TaskRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Task, error) {
 	var row TaskRow
 
 	found, err := r.db.From(taskTable).
@@ -97,7 +113,7 @@ func (r *TaskRepository) List(ctx context.Context, limit, offset int) ([]*domain
 	var total int64
 
 	_, err = r.db.From(taskTable).
-		Select(goqu.Count("*")).
+		Select(goqu.COUNT("*")).
 		Where(goqu.Ex{"deleted_at": nil}).
 		ScanValContext(ctx, &total)
 	if err != nil {
@@ -109,4 +125,59 @@ func (r *TaskRepository) List(ctx context.Context, limit, offset int) ([]*domain
 	for _, row := range rows {
 		tasks = append(tasks, row.toDomain())
 	}
+	return tasks, total, nil
 }
+
+func (r *TaskRepository) Update(ctx context.Context, task *domain.Task) error {
+	task.UpdatedAt = time.Now().UTC()
+	res, err := r.db.Update(taskTable).Set(goqu.Record{
+		"title":       task.Title,
+		"description": task.Description,
+		"status":      string(task.Status),
+		"updated_at":  task.UpdatedAt,
+	}).Where(goqu.Ex{"id": task.ID, "deleted_at": nil}).Executor().ExecContext(ctx)
+	if err != nil {
+		return fmt.Errorf("Error updating task: %v", err)
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("Error getting affected rows: %v", err)
+	}
+	if affected == 0 {
+		return domain.ErrTaskNotFound
+	}
+	return nil
+}
+
+func (r *TaskRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
+	res, err := r.db.Update(taskTable).Set(goqu.Record{"deleted_at": time.Now().UTC()}).Where(goqu.Ex{"id": id}).Executor().ExecContext(ctx)
+	if err != nil {
+		return fmt.Errorf("Error updating task: %v", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("Error getting affected rows: %v", err)
+	}
+	if affected == 0 {
+		return domain.ErrTaskNotFound
+	}
+	return nil
+}
+
+func (r *TaskRepository) HardDelete(ctx context.Context, id uuid.UUID) error {
+	res, err := r.db.Delete(taskTable).Where(goqu.Ex{"id": id}).Executor().ExecContext(ctx)
+	if err != nil {
+		return fmt.Errorf("Error deleting task: %v", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("Error getting affected rows: %v", err)
+	}
+	if affected == 0 {
+		return domain.ErrTaskNotFound
+	}
+	return nil
+}
+
+var _ domain.TaskRepository = (*TaskRepository)(nil)

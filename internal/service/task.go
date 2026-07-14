@@ -39,7 +39,7 @@ func (s *TaskService) CreateTask(ctx context.Context, in CreateTaskInput) (*doma
 		ID:          uuid.New(),
 		Title:       in.Title,
 		Description: in.Description,
-		Status:      string(domain.TaskStatusRunning),
+		Status:      domain.TaskStatusRunning,
 	}
 
 	if err := s.repo.Create(ctx, task); err != nil {
@@ -79,7 +79,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, id uuid.UUID, update Updat
 		task.Description = *update.Description
 	}
 	if update.Status != nil {
-		task.Status = string(*update.Status)
+		task.Status = *update.Status
 	}
 	if err := s.repo.Update(ctx, task); err != nil {
 		s.log.Error("Failed to update task", zap.Error(err))
