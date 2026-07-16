@@ -11,6 +11,8 @@ import (
 )
 func NewRouter (taskHandler *handler.TaskHandler), log *zap.Logger) http.Handler {
 	r := chi.NewRouter()
+
+	r.Use(chmw.RequestID)
 	
 }
 
