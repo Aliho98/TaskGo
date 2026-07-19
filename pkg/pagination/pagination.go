@@ -19,7 +19,7 @@ type Pagination struct {
 func (p Pagination) Limit() int  { return p.PageSize }
 func (p Pagination) Offset() int { return (p.Page - 1) * p.PageSize }
 
-func FromQuery(q *url.Values) Pagination {
+func FromQuery(q url.Values) Pagination {
 	page, err := strconv.Atoi(q.Get("page"))
 	if err != nil || page < 1 {
 		page = DefaultPage

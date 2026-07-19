@@ -41,7 +41,7 @@ type TaskResponse struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-func FromDomain(task domain.Task) TaskResponse {
+func FromDomain(task *domain.Task) TaskResponse {
 	return TaskResponse{
 		ID:          task.ID,
 		Title:       task.Title,
@@ -52,7 +52,7 @@ func FromDomain(task domain.Task) TaskResponse {
 	}
 }
 
-func FromDomainList(tasks []domain.Task) []TaskResponse {
+func FromDomainList(tasks []*domain.Task) []TaskResponse {
 	responses := make([]TaskResponse, 0, len(tasks))
 	for _, task := range tasks {
 		responses = append(responses, FromDomain(task))
