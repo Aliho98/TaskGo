@@ -1,80 +1,71 @@
 package main
 
 import (
-	"78/database"
-	"78/handlers"
-	"78/logger"
-	"fmt"
-	"log"
+	"context"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"78/internal/config"
+	"78/internal/platform/database"
+	"78/internal/platform/logger"
+	"78/internal/repository/postgres"
+	"78/internal/service"
+	transporthttp "78/internal/transport/http" // aliased: avoids clashing with the imported "net/http" package
+	"78/internal/transport/http/handler"
+	"78/pkg/validator"
+
+	"go.uber.org/zap"
 )
 
 func main() {
+	cfg := config.LoadConfig()
 
-	//*********************
-	err := database.Connect()
+	log, err := logger.New(cfg.Env)
 	if err != nil {
-		log.Fatal("Connection failed", err)
-		logger.Log.Error("could not connect to database") //log to logger
+		panic(err)
 	}
-	//*********************
+	defer log.Sync()
 
-	defer database.Close()
-	//*********************
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	const dsn = "postgres://postgres:@localhost:5432/postgres?sslmode=disable"
+	db, err := database.NewPostgresDb(ctx, cfg.PostgresHost)
+	if err != nil {
+		log.Fatal("Failed to connect to database", zap.Error(err))
+	}
+	defer db.Close()
 
-	if err := database.RunMigrations(dsn); err != nil {
-		log.Fatal(err)
-		logger.Log.Error("could not migrate") //log to logger
+	taskRepo := postgres.NewTaskRepository(db)
+	taskservice := service.NewTaskService(taskRepo, log)
+	v := validator.New()
+	taskHandler := handler.NewTaskHandler(taskservice, log, v)
+	router := transporthttp.NewRouter(taskHandler, log)
 
+	srv := &http.Server{
+		Addr:         ":" + cfg.HTTPPort,
+		Handler:      router,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
-	//*********************
-
-	mux := http.NewServeMux() //creates a "router - maps urls to handler function
-
-	mux.HandleFunc("/tasks", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			handlers.CreateTask(w, r)
-		case http.MethodGet:
-			handlers.GetAllTasks(w, r)
-		default:
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+	go func() {
+		log.Info("Starting server on port " + cfg.HTTPPort)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Failed to listen on port " + cfg.HTTPPort)
 		}
+	}()
+	<-ctx.Done()
+	log.Info("Shutting down server...")
 
-	})
-	mux.HandleFunc("/tasks/{id}/hard", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodDelete:
-			handlers.DeleteTaskHard(w, r)
-		default:
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		}
-	})
-	mux.HandleFunc("/tasks/{id}", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handlers.GetTaskByID(w, r)
-
-		case http.MethodDelete:
-			handlers.DeleteTaskSoft(w, r)
-
-		case http.MethodPut:
-			handlers.UpdateTask(w, r)
-
-		default:
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-
-		}
-	})
-	//*********************
-	if err := logger.Init(); err != nil {
-		log.Fatal("failed to initialize log", err)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Fatal("Failed to shutdown server", zap.Error(err))
 	}
-	defer logger.Close()
+	log.Info("Server gracefully stopped")
 
-	fmt.Println("Listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
 }
