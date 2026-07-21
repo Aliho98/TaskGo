@@ -21,6 +21,14 @@ type Task struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
 }
+
+type ListParams struct {
+	Limit   int
+	Offset  int
+	Status  *TaskStatus
+	SortBy  string
+	SortDir string
+}
 type TaskStatus string
 
 const (
@@ -33,7 +41,7 @@ const (
 type TaskRepository interface {
 	Create(ctx context.Context, task *Task) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Task, error)
-	List(ctx context.Context, limit, offset int) ([]*Task, int64, error)
+	List(ctx context.Context, params ListParams) ([]*Task, int64, error)
 	Update(ctx context.Context, task *Task) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	HardDelete(ctx context.Context, id uuid.UUID) error

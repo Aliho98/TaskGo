@@ -55,6 +55,18 @@ func (r TaskRow) toDomain() *domain.Task {
 
 const taskTable = "tasks"
 
+var sortableColumns = map[string]string{
+	"created_at": "created_at",
+	"updated_at": "updated_at",
+	"title":      "title",
+	"status":     "status",
+}
+
+const (
+	defaultSortBy  = "created_at"
+	defaultSortDir = "desc"
+)
+
 type TaskRepository struct {
 	db *goqu.Database
 }
@@ -72,7 +84,7 @@ func (r *TaskRepository) Create(ctx context.Context, task *domain.Task) error {
 		"id":          task.ID,
 		"title":       task.Title,
 		"description": task.Description,
-		"status":      task.Status,
+		"status":      string(task.Status),
 		"created_at":  task.CreatedAt,
 		"updated_at":  task.UpdatedAt,
 	}).Executor().ExecContext(ctx)
@@ -97,31 +109,43 @@ func (r *TaskRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Tas
 	return row.TableName(), nil
 }
 
-func (r *TaskRepository) List(ctx context.Context, limit, offset int) ([]*domain.Task, int64, error) {
-	var rows []TaskRow
+func (r *TaskRepository) List(ctx context.Context, params domain.ListParams) ([]*domain.Task, int64, error) {
+	where := goqu.Ex{"deleted_at": nil}
+	if params.Status != nil {
+		where["status"] = string(*params.Status)
+	}
 
+	column, ok := sortableColumns[params.SortBy]
+	if !ok {
+		column = defaultSortBy
+	}
+	orderExpr := goqu.I(column)
+	orderedExpr := orderExpr.Desc()
+	if params.SortDir != "asc" {
+		orderedExpr = orderExpr.Asc()
+	}
+
+	var rows []TaskRow
 	err := r.db.From(taskTable).
-		Where(goqu.Ex{"deleted_at": nil}).
-		Order(goqu.I("created_at ").Desc()).
-		Limit(uint(limit)).
-		Offset(uint(offset)).
+		Where(where).
+		Order(orderedExpr).
+		Limit(uint(params.Limit)).
+		Offset(uint(params.Offset)).
 		ScanStructsContext(ctx, &rows)
 	if err != nil {
-		return nil, 0, fmt.Errorf("List task: %v", err)
+		return nil, 0, fmt.Errorf("Error getting tasks: %v", err)
 	}
 
 	var total int64
-
 	_, err = r.db.From(taskTable).
 		Select(goqu.COUNT("*")).
-		Where(goqu.Ex{"deleted_at": nil}).
+		Where(where).
 		ScanValContext(ctx, &total)
 	if err != nil {
-		return nil, 0, fmt.Errorf("Count task: %v", err)
-
+		return nil, 0, fmt.Errorf("Error getting tasks: %v", err)
 	}
 
-	tasks := make([]*domain.Task, len(rows))
+	tasks := make([]*domain.Task, 0, len(rows))
 	for _, row := range rows {
 		tasks = append(tasks, row.toDomain())
 	}

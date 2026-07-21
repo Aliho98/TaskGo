@@ -87,21 +87,54 @@ func (h *TaskHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
-	p := pagination.FromQuery(r.URL.Query())
-	tasks, total, err := h.service.ListTasks(r.Context(), p)
+var allowedSortBy = map[string]bool{
+	"created_at": true,
+	"updated_at": true,
+	"title":      true,
+	"status":     true,
+}
+var allowedSortDir = map[string]bool{
+	"asc":  true,
+	"desc": true,
+}
 
-	if err != nil {
-		h.log.Error("List tasks error", zap.Error(err))
-		respondError(w, http.StatusInternalServerError, err.Error())
-		return
+func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	p := pagination.FromQuery(q)
+	filter := service.ListFilter{
+		SortBy:  "created_at",
+		SortDir: "desc",
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"data": dto.FromDomainList(tasks),
-		"meta": pagination.NewMeta(p, total),
-	})
+	if raw := q.Get("status"); raw != "" {
+		status := domain.TaskStatus(raw)
+		switch status {
+		case domain.TaskStatusCompleted, domain.TaskStatusRunning, domain.TaskStatusNew:
+			filter.Status = &status
+		default:
+			respondError(w, http.StatusBadRequest, "invalid status")
+			return
+		}
 
+		if raw := q.Get("sort_by"); raw != "" {
+			if !allowedSortBy[raw] {
+				respondError(w, http.StatusBadRequest, "invalid sort by")
+				return
+			}
+			filter.SortBy = raw
+		}
+		task, total, err := h.service.ListTasks(r.Context(), p, filter)
+		if err != nil {
+			h.log.Error("List task error", zap.Error(err))
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"data": dto.FromDomainList(task),
+			"meta": pagination.NewMeta(p, total)})
+	}
+	
 }
 
 func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {

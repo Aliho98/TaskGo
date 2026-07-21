@@ -19,6 +19,12 @@ type CreateTaskInput struct {
 	Description string
 }
 
+type ListFilter struct {
+	Status  *domain.TaskStatus
+	SortBy  string
+	SortDir string
+}
+
 type UpdateTaskInput struct {
 	Title       *string
 	Description *string
@@ -57,8 +63,14 @@ func (s *TaskService) GetTask(ctx context.Context, id uuid.UUID) (*domain.Task, 
 	return task, nil
 }
 
-func (s *TaskService) ListTasks(ctx context.Context, p pagination.Pagination) ([]*domain.Task, int64, error) {
-	tasks, total, err := s.repo.List(ctx, p.Limit(), p.Offset())
+func (s *TaskService) ListTasks(ctx context.Context, p pagination.Pagination, filter ListFilter) ([]*domain.Task, int64, error) {
+	tasks, total, err := s.repo.List(ctx, domain.ListParams{
+		Limit:   p.Limit(),
+		Offset:  p.Offset(),
+		Status:  filter.Status,
+		SortBy:  filter.SortBy,
+		SortDir: filter.SortDir,
+	})
 	if err != nil {
 		s.log.Error("Failed to list tasks", zap.Error(err))
 		return nil, 0, fmt.Errorf("failed to list tasks: %w", err)
