@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tasks
+    ports:
+      - "5432:5432"
+    volumes:
+      # Named volume — data survives `docker compose down` (but not
+      # `docker compose down -v`), so you don't lose your 20 seed tasks
+      # every time you restart the stack.
+      - postgres_data:/var/lib/postgresql/data
+    # healthcheck lets other services (migrate, app) wait for Postgres to
+    # be genuinely READY to accept connections, not just "the container
+    # started" — those aren't the same moment; Postgres takes a beat to
+    # initialize even after its process launches.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+  # A one-shot service that runs your migrations, then exits. This
+  # replaces you manually running `migrate ... up` from PowerShell every
+  # time — the whole stack becomes self-contained.
+  migrate:
+    image: migrate/migrate:v4.17.1
+    volumes:
+      - ./migrations:/migrations
+    # Inside the Docker network, containers reach each other by SERVICE
+    # NAME, not "localhost" — "postgres" here resolves to the postgres
+    # container automatically via Docker's internal DNS. This is the one
+    # thing that trips people up most when dockerizing something that
+    # worked fine locally against "localhost:5432".
+    command:
+      [
+        "-path", "/migrations",
+        "-database", "postgres://postgres:postgres@postgres:5432/tasks?sslmode=disable",
+        "up",
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build: .
+    environment:
+      APP_ENV: production
+      HTTP_PORT: 8080
+      # Connection details passed as separate env vars—your app constructs
+      # the connection string from these pieces.
+      POSTGRES_HOST: postgres://postgres:postgres@postgres:5432/tasks?sslmode=disable
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Waits for the migrate service to finish successfully (exit code 0)
+      # before starting the app — so the app never races against a
+      # not-yet-migrated database, which is exactly the bug you spent the
+      # last several messages debugging.
+      migrate:
+        condition: service_completed_successfully
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:

@@ -22,6 +22,7 @@ import (
 
 func main() {
 	cfg := config.LoadConfig()
+	println("DSN in use:", cfg.PostgresHost)
 
 	log, err := logger.New(cfg.Env)
 	if err != nil {

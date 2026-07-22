@@ -24,7 +24,7 @@ func LoadConfig() Config {
 	return Config{
 		Env:           getEnv("APP_ENV", "development"),
 		HTTPPort:      getEnv("HTTP_PORT", "8080"),
-		PostgresHost:  getEnv("POSTGRES_HOST", "postgres://postgres:postgres@localhost:5432/taskdb?sslmode=disable"),
+		PostgresHost:  getEnv("POSTGRES_HOST", "postgres://postgres:postgres@localhost:5432/tasks?sslmode=disable"),
 		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 	}

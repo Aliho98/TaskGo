@@ -49,12 +49,13 @@ func NewTaskHandler(service *service.TaskService, logger *zap.Logger, v *validat
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateTaskRequest
 
-	if err := json.NewEncoder(w).Encode(req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	if err := h.validator.Struct(req); err != nil {
 		respondValidationErrors(w, err)
+		return
 	}
 
 	task, err := h.service.CreateTask(r.Context(), req.ToServiceInput())
@@ -115,26 +116,27 @@ func (h *TaskHandler) List(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusBadRequest, "invalid status")
 			return
 		}
+	}
 
-		if raw := q.Get("sort_by"); raw != "" {
-			if !allowedSortBy[raw] {
-				respondError(w, http.StatusBadRequest, "invalid sort by")
-				return
-			}
-			filter.SortBy = raw
-		}
-		task, total, err := h.service.ListTasks(r.Context(), p, filter)
-		if err != nil {
-			h.log.Error("List task error", zap.Error(err))
-			respondError(w, http.StatusInternalServerError, err.Error())
+	if raw := q.Get("sort_by"); raw != "" {
+		if !allowedSortBy[raw] {
+			respondError(w, http.StatusBadRequest, "invalid sort by")
 			return
 		}
-
-		respondJSON(w, http.StatusOK, map[string]interface{}{
-			"data": dto.FromDomainList(task),
-			"meta": pagination.NewMeta(p, total)})
+		filter.SortBy = raw
 	}
-	
+
+	task, total, err := h.service.ListTasks(r.Context(), p, filter)
+
+	if err != nil {
+		h.log.Error("List task error", zap.Error(err))
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"data": dto.FromDomainList(task),
+		"meta": pagination.NewMeta(p, total)})
 }
 
 func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -154,6 +156,7 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, domain.ErrTaskNotFound) {
 			respondError(w, http.StatusNotFound, err.Error())
+			return
 		}
 		h.log.Error("Delete task error", zap.Error(err))
 		respondError(w, http.StatusInternalServerError, err.Error())

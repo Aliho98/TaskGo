@@ -29,7 +29,7 @@ func NewRouter(taskHandler *handler.TaskHandler, logger *zap.Logger) http.Handle
 		r.Post("/", taskHandler.Create)
 		r.Get("/{id}", taskHandler.Get)
 		r.Get("/", taskHandler.List)
-		r.Get("/{id}", taskHandler.Delete)
+		r.Delete("/{id}", taskHandler.Delete)
 		r.Patch("/{id}", taskHandler.Update)
 	})
 	return router

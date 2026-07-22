@@ -53,7 +53,7 @@ func (r TaskRow) toDomain() *domain.Task {
 	return t
 }
 
-const taskTable = "tasks"
+const taskTable = "task"
 
 var sortableColumns = map[string]string{
 	"created_at": "created_at",
